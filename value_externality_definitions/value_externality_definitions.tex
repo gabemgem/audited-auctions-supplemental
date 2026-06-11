@@ -1,0 +1,239 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath, amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\geometry{margin=1in}
+
+\title{Advertiser Values and Externalities:\\Construction from Raw Tweet Data}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Raw Data}
+
+The dataset consists of $T = 11{,}853$ tweets (after filtering) collected as of $D = \text{February 2, 2025}$.
+Each tweet $t$ carries the following raw fields:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Symbol & Field & Description \\
+\midrule
+$I_t$ & \texttt{impression\_count} & Total number of times the tweet was shown \\
+$A_t$ & \texttt{action\_count} & Total engagement actions (likes, retweets, replies, quotes, bookmarks) \\
+$d_t$ & \texttt{days\_old} & Age in days: $(D - \text{created\_at}_t)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Age in months is defined as
+\begin{equation}
+    M_t = \frac{d_t}{30}.
+\end{equation}
+
+\section{Community Notes Externality Score}
+
+\subsection{Note Classification}
+
+Each note $n$ attached to tweet $t_n$ carries a binary classification $c_n$.
+This is mapped to a signed score:
+\begin{equation}
+    s_n =
+    \begin{cases}
+        -1 & c_n = \texttt{MISINFORMED\_OR\_POTENTIALLY\_MISLEADING} \\
+        +1 & c_n = \texttt{NOT\_MISLEADING}
+    \end{cases}
+\end{equation}
+
+\subsection{Rating Aggregation}
+
+Each note $n$ receives ratings from a set of raters $\mathcal{R}(n)$.
+Each rating $r \in \mathcal{R}(n)$ has a helpfulness level mapped to a score:
+\begin{equation}
+    \phi_r =
+    \begin{cases}
+        -1 & \texttt{helpfulnessLevel} = \texttt{NOT\_HELPFUL} \\
+         0 & \texttt{helpfulnessLevel} = \texttt{SOMEWHAT\_HELPFUL} \\
+        +1 & \texttt{helpfulnessLevel} = \texttt{HELPFUL}
+    \end{cases}
+\end{equation}
+
+The aggregate rating score for note $n$ is
+\begin{equation}
+    R_n = 1 + \sum_{r \in \mathcal{R}(n)} \phi_r,
+\end{equation}
+where the additive $1$ accounts for the original note author being treated as a rater
+who agrees with their own note.
+
+\subsection{Note and Tweet Externality Scores}
+
+The signed externality contribution of note $n$ is
+\begin{equation}
+    X_n = s_n \cdot R_n.
+\end{equation}
+
+The raw externality score of tweet $t$ is the sum over all its notes
+$\mathcal{N}(t)$:
+\begin{equation}
+    X_t^{\text{raw}} = \sum_{n \in \mathcal{N}(t)} X_n,
+\end{equation}
+with $X_t^{\text{raw}} = 0$ for tweets that received no notes.
+
+\subsection{Normalization by Impressions}
+
+To make the externality comparable across tweets with different reach, it is expressed
+per 1{,}000 impressions and then normalized relative to the dataset mean.
+The normalization constant is computed over all $T$ tweets before any filtering:
+\begin{equation}
+    \gamma
+    = \frac{\bar{X}^{\text{raw}}}{\bar{I}/1000}
+    = \frac{(1/T)\sum_t X_t^{\text{raw}}}{(1/T)\sum_t I_t / 1000}.
+\end{equation}
+
+For each tweet with $I_t > 0$, the normalized externality per 1{,}000 impressions is
+\begin{equation}
+    \hat{x}_t
+    = \frac{X_t^{\text{raw}} / (I_t / 1000)}{\gamma}
+    = \frac{X_t^{\text{raw}}}{\gamma \cdot (I_t / 1000)}.
+    \label{eq:hat_x}
+\end{equation}
+A tweet with exactly average externality per impression has $\hat{x}_t = 1$.
+Positive values indicate content deemed not misleading by the community;
+negative values indicate content deemed misleading.
+
+\noindent
+\textbf{Outlier removal.} Tweets with more than 150 actions per 1{,}000 impressions
+($A_t / (I_t / 1000) \geq 150$) are removed as outliers.
+
+\section{Advertiser Value Score and Externality Score}
+
+Both scores are converted to monthly rates using the tweet's impression velocity.
+
+\subsection{Externality Score}
+
+The externality score $e_t^{\text{score}}$ (units: normalized externality per month) is
+\begin{equation}
+    e_t^{\text{score}}
+    = \hat{x}_t \cdot \frac{I_t / M_t}{1000}
+    = \frac{X_t^{\text{raw}}}{\gamma \cdot (I_t/1000)} \cdot \frac{I_t}{1000 \cdot M_t}
+    = \frac{X_t^{\text{raw}}}{\gamma \cdot M_t}.
+    \label{eq:e_score}
+\end{equation}
+Note that $I_t$ cancels: the score depends only on the total raw note signal $X_t^{\text{raw}}$
+and tweet age $M_t$, not on raw impression count.
+
+\subsection{Advertiser Value Score}
+
+The value score $v_t^{\text{score}}$ (units: actions per month) is
+\begin{equation}
+    v_t^{\text{score}}
+    = \frac{A_t / (I_t / 1000)}{1} \cdot \frac{I_t / M_t}{1000}
+    = \frac{A_t}{M_t}.
+    \label{eq:v_score}
+\end{equation}
+Again $I_t$ cancels: the value score is simply the total engagement action count divided
+by tweet age in months.
+
+\section{Cost Parameterization}
+
+The optimizer (\texttt{Collateralized\_Auction\_genetic\_script.py}) scales the raw scores
+by two free parameters before running the auction:
+\begin{equation}
+    v_t = \zeta_v \cdot v_t^{\text{score}}, \qquad
+    e_t = \zeta_e \cdot e_t^{\text{score}},
+    \label{eq:scaling}
+\end{equation}
+where:
+\begin{itemize}
+    \item $\zeta_v$ (\texttt{action\_cost}) is the monetary value of one advertiser action;
+          default $\zeta_v = 1$.
+    \item $\zeta_e$ (\texttt{externality\_cost}) is the weight placed on one unit of
+          Community Notes externality; varied across experiments as
+          $\zeta_e \in \{0.001, 0.005, 0.0075, 0.01, 0.025, 0.05, 0.1\}$.
+\end{itemize}
+
+\section{Joint Normalization to $[-1,\,1]$}
+
+The GA searches for $\tau$ in a normalized space to ensure numerical stability.
+Both $v_t$ and $e_t$ are scaled jointly using the global minimum and maximum
+across both columns:
+\begin{equation}
+    x_{\min} = \min\!\left(\min_t v_t,\; \min_t e_t\right), \qquad
+    x_{\max} = \max\!\left(\max_t v_t,\; \max_t e_t\right).
+\end{equation}
+The normalized values are
+\begin{equation}
+    \tilde{v}_t = \frac{2(v_t - x_{\min})}{x_{\max} - x_{\min}} - 1, \qquad
+    \tilde{e}_t = \frac{2(e_t - x_{\min})}{x_{\max} - x_{\min}} - 1,
+    \label{eq:normalization}
+\end{equation}
+so that $\tilde{v}_t, \tilde{e}_t \in [-1,1]$ for all $t$ in the dataset.
+Because the joint extrema are used, the relative scale between $v$ and $e$ is
+preserved after normalization.
+
+\section{Auction Mechanism}
+
+\subsection{Advertiser Sampling}
+
+For each of $K$ simulated auctions, $n$ tweets are drawn without replacement from the
+full dataset. Each sampled tweet $i$ participates as an advertiser with pair
+$(\tilde{v}_i, \tilde{e}_i)$ in normalized space.
+
+\subsection{Threshold Function $\tau$}
+
+The collateralized auction uses a polynomial threshold function of degree $d$:
+\begin{equation}
+    \tau(\tilde{e};\,\boldsymbol{\beta})
+    = \sum_{k=0}^{d} \beta_k\, \tilde{e}^k,
+    \qquad \boldsymbol{\beta} = (\beta_0, \ldots, \beta_d) \in \mathbb{R}^{d+1}.
+\end{equation}
+The polynomial degree $d \in \{1, 2, 3\}$ is a hyperparameter varied across experiments.
+
+\subsection{Collateralized vs.\ VCG Auction}
+
+Both auctions allocate $k$ slots to the highest-value bidders.
+
+\begin{description}
+    \item[VCG (counterfactual).] All $n$ advertisers bid their value $\tilde{v}_i$.
+    The top-$k$ advertisers by $\tilde{v}_i$ win.
+
+    \item[Collateralized.] Advertiser $i$ is admitted to the auction only if
+    \begin{equation}
+        \tilde{v}_i \;\geq\; \tau(\tilde{e}_i;\,\boldsymbol{\beta}).
+    \end{equation}
+    Among admitted advertisers, the top $k$ by $\tilde{v}_i$ win.
+    If fewer than $k$ advertisers are admitted, all of them win.
+\end{description}
+
+\subsection{Welfare Objective}
+
+For a set of $k$ winning advertisers $\mathcal{W}$, define the auction welfare as
+\begin{equation}
+    W(\mathcal{W}) = \sum_{i \in \mathcal{W}} \tilde{v}_i + \sum_{i \in \mathcal{W}} \tilde{e}_i.
+\end{equation}
+The fitness function used by the genetic algorithm is the mean collateralized welfare
+averaged over all $K$ auction draws:
+\begin{equation}
+    F(\boldsymbol{\beta})
+    = \frac{1}{K} \sum_{j=1}^{K} W\!\left(\mathcal{W}_j^{\text{coll}}(\boldsymbol{\beta})\right).
+\end{equation}
+The GA searches for $\boldsymbol{\beta}^* = \arg\max_{\boldsymbol{\beta}} F(\boldsymbol{\beta})$.
+
+\subsection{Coefficient Recovery in Original Space}
+
+After the GA returns $\boldsymbol{\beta}^*$ in normalized space, the optimal threshold is
+converted back to the original $(e, v)$ coordinates using the inverse of the affine
+transform in \eqref{eq:normalization}. This is done by
+\texttt{NegOneOneScaler.poly\_from\_normalized}, which applies a change of variables
+via Horner's rule to produce coefficients $\boldsymbol{\alpha}^*$ such that
+\begin{equation}
+    \tau^*(e) = \sum_{k=0}^{d} \alpha_k^*\, e^k
+    \quad\Longleftrightarrow\quad
+    \tau(\tilde{e};\,\boldsymbol{\beta}^*),
+\end{equation}
+where $e$ and $\tilde{e}$ are related by \eqref{eq:scaling} and \eqref{eq:normalization}.
+
+\end{document}

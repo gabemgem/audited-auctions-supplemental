@@ -1,0 +1,13 @@
+category,label,count,pct
+misleadingMissingImportantContext,Missing Context,22236,36.83
+misleadingFactualError,Factual Error,18028,29.86
+notMisleadingFactuallyCorrect,Factually Correct,12720,21.07
+notMisleadingPersonalOpinion,Personal Opinion,10800,17.89
+misleadingUnverifiedClaimAsFact,Unverified Claim,10214,16.92
+notMisleadingOther,Not Misleading (Other),5984,9.91
+misleadingOutdatedInformation,Outdated Info,5793,9.6
+misleadingOther,Misleading (Other),3676,6.09
+notMisleadingClearlySatire,Clearly Satire,3595,5.95
+misleadingSatire,Satire (Misleading),2081,3.45
+misleadingManipulatedMedia,Manipulated Media,2008,3.33
+notMisleadingOutdatedButNotWhenWritten,Outdated When Written,633,1.05

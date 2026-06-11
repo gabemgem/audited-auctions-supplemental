@@ -1,0 +1,5 @@
+,impressions_per_month,agg_rating_per_month,v_score,e_score
+impressions_per_month,1.0,0.0613,0.7196,0.0613
+agg_rating_per_month,0.0613,1.0,0.0782,1.0
+v_score,0.7196,0.0782,1.0,0.0782
+e_score,0.0613,1.0,0.0782,1.0

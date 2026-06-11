@@ -1,0 +1,13 @@
+category,label,n_notes,total_agree,total_disagree,agree_rate
+misleadingMissingImportantContext,Missing Context,22236,9703209,4551570,0.6807
+misleadingFactualError,Factual Error,18028,7895133,3413606,0.6981
+notMisleadingFactuallyCorrect,Factually Correct,12720,1826453,1585528,0.5353
+notMisleadingPersonalOpinion,Personal Opinion,10800,1652343,1331210,0.5538
+misleadingUnverifiedClaimAsFact,Unverified Claim,10214,4137135,2106706,0.6626
+notMisleadingOther,Not Misleading (Other),5984,738486,639721,0.5358
+misleadingOutdatedInformation,Outdated Info,5793,2428258,1108840,0.6865
+misleadingOther,Misleading (Other),3676,1410137,735085,0.6573
+notMisleadingClearlySatire,Clearly Satire,3595,466459,314849,0.597
+misleadingSatire,Satire (Misleading),2081,881533,440136,0.667
+misleadingManipulatedMedia,Manipulated Media,2008,835971,362138,0.6977
+notMisleadingOutdatedButNotWhenWritten,Outdated When Written,633,67731,63611,0.5157

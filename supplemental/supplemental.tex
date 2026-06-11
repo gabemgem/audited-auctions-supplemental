@@ -1,0 +1,514 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath, amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{float}
+\floatstyle{ruled}
+\newfloat{algorithm}{H}{loa}
+\floatname{algorithm}{Algorithm}
+\usepackage{hyperref}
+\geometry{margin=1in}
+
+\renewcommand{\arraystretch}{1.3}
+
+% Coefficient vector for tau polynomial (distinct from aggregate rating beta_i)
+\newcommand{\bsc}{\mathbf{c}}
+
+\title{Supplemental Material: Empirical Methodology}
+\date{}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\bigskip
+
+\noindent This document describes the construction of advertiser value and externality
+scores from the XNP400 dataset, the three auction mechanisms used in the
+empirical simulations, the genetic algorithm used to optimize the threshold
+function, and the expected penalty curves derived from the optimized threshold.
+Notation follows Tables~\ref{tab:theory_notation} and~\ref{tab:empirical_notation}
+in the main text.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Dataset and Score Construction}
+\label{sec:data}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{XNP400 Dataset}
+
+We use the XNP400 dataset, a corpus of $N = 11{,}853$ posts (after filtering)
+collected from the X (Twitter) platform as of February~2, 2025.
+For each post $i$ we observe:
+
+\begin{center}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+Symbol & Source field & Description \\
+\midrule
+$\eta_i$ & \texttt{impression\_count} & Total lifetime impressions \\
+$\alpha_i$ & \texttt{action\_count}   & Total engagements (likes, retweets, replies,
+                                        quotes, bookmarks) \\
+$\mu_i$   & derived                   & Age in months: $(\text{Feb 2, 2025} -
+                                        \text{created\_at}_i)/30$ \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\noindent
+Each post is also associated with a set of Community Notes $\mathcal{J}(i)$.
+Note $j \in \mathcal{J}(i)$ carries a binary direction $\pi_{ij} \in \{-1,+1\}$
+and receives a set of helpfulness ratings $\mathcal{L}(i,j)$ from the community.
+
+\subsection{Data Collection and Filtering}
+\label{sec:filtering}
+
+Posts were retrieved from the X Community Notes public data release as of
+February~2, 2025.
+We restrict the sample to posts that satisfy all of the following criteria:
+
+\begin{enumerate}
+    \item \textbf{At least one Community Note.}
+    We include only posts that attracted at least one note.
+    Posts without any Community Note carry no externality signal and are excluded.
+
+    \item \textbf{Positive impressions.}
+    Posts with zero recorded lifetime impressions are dropped, as their
+    per-month scores are undefined.
+
+    \item \textbf{Outlier trimming.}
+    We remove the top and bottom 0.1\% of posts by aggregate post rating
+    $\beta_i$ and by total action count $\alpha_i$.
+    This trims approximately 24 posts at each tail and prevents extreme outliers
+    from distorting the score distributions.
+
+    \item \textbf{Minimum agreement score.}
+    Posts with an agreement score below $-400$ (rating units per 1{,}000
+    impressions) are removed.
+    These posts have extraordinarily negative community assessments that are
+    likely the result of viral coordinated flagging rather than genuine
+    advertiser-relevant externalities.
+\end{enumerate}
+
+After applying all filters the sample contains $N = 11{,}853$ posts spanning
+posts created from the platform's early period through early 2025.
+
+\subsection{Community Notes Scoring}
+\label{sec:notes}
+
+Each rating $l \in \mathcal{L}(i,j)$ is mapped to a helpfulness score:
+\begin{equation}
+    \rho_{ijl} =
+    \begin{cases}
+        1   & \texttt{helpfulnessLevel} = \texttt{HELPFUL} \\
+        0.5 & \texttt{helpfulnessLevel} = \texttt{SOMEWHAT\_HELPFUL} \\
+        0   & \texttt{helpfulnessLevel} = \texttt{NOT\_HELPFUL}
+    \end{cases}
+\end{equation}
+
+The note direction encodes whether the note author classified the post as misleading:
+\begin{equation}
+    \pi_{ij} =
+    \begin{cases}
+        -1 & \texttt{classification} = \texttt{MISINFORMED\_OR\_POTENTIALLY\_MISLEADING} \\
+        +1 & \texttt{classification} = \texttt{NOT\_MISLEADING}
+    \end{cases}
+\end{equation}
+
+The aggregate rating of post $i$ sums the signed, weighted contributions of all
+notes and their ratings:
+\begin{equation}
+    \beta_i = \sum_{j \in \mathcal{J}(i)} \pi_{ij}
+              \Bigl(1 + \sum_{l \in \mathcal{L}(i,j)} \rho_{ijl}\Bigr),
+    \label{eq:beta}
+\end{equation}
+where the additive~$1$ inside the parentheses treats the note author as an
+implicit rater who agrees with their own note.  Posts with no notes have
+$\beta_i = 0$.  A post flagged by many raters as misleading has $\beta_i \ll 0$;
+one rated as helpful has $\beta_i > 0$.
+
+\subsection{Value and Externality Scores}
+\label{sec:scores}
+
+Both scores are expressed as monthly rates to control for post age,
+following the E1 and V1 methods described in the main text.
+
+\subsubsection*{Externality score (E1)}
+
+The per-post externality (dollars per month) is
+\begin{equation}
+    e_i = \zeta \cdot \frac{\beta_i}{\mu_i},
+    \label{eq:e_score}
+\end{equation}
+where $\zeta \geq 0$ is the \emph{externality cost} parameter (dollars per unit of
+aggregate rating per month).  Because most posts that attract Community Notes are
+flagged as misleading, $\beta_i < 0$ for the majority of posts in the sample, so
+$e_i < 0$ at any positive $\zeta$.
+
+\subsubsection*{Advertiser value score (V1)}
+
+The per-post advertiser value (actions per month) is
+\begin{equation}
+    v_i = \theta \cdot \frac{\alpha_i}{\mu_i},
+    \label{eq:v_score}
+\end{equation}
+where $\theta \geq 0$ is the \emph{action cost} parameter (dollars per engagement
+action per month).  We set $\theta = 1$ throughout, so $v_i$ is measured directly
+in actions per month and serves as the advertiser's declared value in the auction.
+
+\subsection{Calibration of $\zeta$}
+\label{sec:calibration}
+
+We calibrate the externality cost $\zeta$ using two published estimates of the
+dollar value of social media content externalities.
+
+\paragraph{Impression-based estimate (Goldstein et al.).}
+Taking a CPM (cost per thousand impressions) of \$1.53, the implied cost per unit
+of aggregate rating is
+\begin{equation}
+    \zeta^{\text{imp}}
+    = \frac{1.53/1000}{\;\overline{\beta_i/\eta_i}\;}
+    \approx \$2.71 \text{ per rating unit per month,}
+\end{equation}
+where $\overline{\beta_i/\eta_i}$ is the sample mean of aggregate rating per impression.
+
+\paragraph{Action-based estimate (Acquisti et al.).}
+Taking a willingness-to-pay of \$0.54 per engagement action, the implied cost is
+\begin{equation}
+    \zeta^{\text{act}}
+    = \frac{0.54}{\;\overline{\beta_i/\alpha_i}\;}
+    \approx \$2.54 \text{ per rating unit per month,}
+\end{equation}
+where $\overline{\beta_i/\alpha_i}$ is the sample mean of aggregate rating per action.
+
+Both methods yield $\zeta \approx \$2.5$, consistent with each other.  Because
+there is inherent uncertainty in these estimates, we treat $\zeta$ as a free
+parameter and report results across the range $\zeta \in [0.01,\, 100]$.
+
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Auction Simulation}
+\label{sec:simulation}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Setup}
+
+For each experimental cell $(k, \zeta, D, n)$ — allocation slots, externality cost,
+polynomial degree, and bidders per draw — we maintain two independent sets of auction
+draws with different purposes.
+
+\paragraph{Training draws ($J_{\text{train}} = 500$).}
+These are used exclusively by the genetic algorithm as its fitness signal during
+optimization.  The training seed is a function of $(\zeta, n)$ only — it excludes $k$
+and $D$ — so all degrees and slot counts within the same $(\zeta, n)$ cell train on
+identical post samples.  This ensures that any difference in optimized welfare across
+degrees or $k$ values reflects the effect of those parameters and not sampling
+variation in the training data.
+
+\paragraph{Evaluation draws ($J_{\text{eval}} = 2000$).}
+These are held out from the optimizer entirely and used only for final welfare
+reporting.  The evaluation seed is offset from the training seed by a fixed constant,
+guaranteeing independence between the two sets.  Like the training seed, the
+evaluation seed excludes $k$ and $D$, so welfare numbers are directly comparable
+across those dimensions for any fixed $(\zeta, n)$.  The larger draw count (2000
+vs.\ 500) reduces Monte Carlo variance in the reported welfare estimates.
+
+Each draw $j$ is formed by sampling $n$ posts without replacement from the dataset.
+Post $i$ enters draw $j$ with pair $(v_i, e_i)$ computed
+via~\eqref{eq:v_score} and~\eqref{eq:e_score}.
+
+\subsection{Threshold Function}
+
+The collateralized mechanisms use a polynomial threshold of degree $D$:
+\begin{equation}
+    \tau(e;\,\bsc) = \sum_{d=0}^{D} c_d\, e^d,
+    \qquad \bsc = (c_0, c_1, \ldots, c_D) \in \mathbb{R}^{D+1}.
+    \label{eq:tau}
+\end{equation}
+The coefficient vector $\bsc$ is the decision variable optimized by the genetic
+algorithm (Section~\ref{sec:ga}).
+
+\subsection{Three Auction Mechanisms}
+\label{sec:mechanisms}
+
+\subsubsection{VCG (Counterfactual)}
+
+All $n$ advertisers participate.  The $k$ advertisers with the highest values
+are selected:
+\begin{equation}
+    \mathcal{S}^{\text{vcg}}_j
+    = \operatorname*{arg\,max}_{S \subseteq [n],\,|S|=k}\;\sum_{i \in S} v_i.
+\end{equation}
+Social welfare in draw $j$ is
+\begin{equation}
+    W^{\text{vcg}}_j = \sum_{i \in \mathcal{S}^{\text{vcg}}_j} (v_i + e_i).
+\end{equation}
+
+\subsubsection{Participant Audit (VCGA)}
+
+Only advertisers whose declared value clears the threshold are admitted:
+\begin{equation}
+    \mathcal{M}_j(\bsc) = \bigl\{\, i \in [n] : v_i \geq \tau(e_i;\,\bsc) \bigr\}.
+    \label{eq:admitted}
+\end{equation}
+Among admitted advertisers, the top $k$ by value are selected:
+\begin{equation}
+    \mathcal{S}^{\text{vcgPA}}_j(\bsc)
+    = \operatorname*{arg\,max}_{S \subseteq \mathcal{M}_j,\,|S| \leq \min(k,\,|\mathcal{M}_j|)}
+      \;\sum_{i \in S} v_i.
+    \label{eq:vcga_winners}
+\end{equation}
+If fewer than $k$ advertisers are admitted, all admitted advertisers are selected.
+Social welfare is
+\begin{equation}
+    W^{\text{vcgPA}}_j(\bsc) = \sum_{i \in \mathcal{S}^{\text{vcgPA}}_j} (v_i + e_i).
+\end{equation}
+The auction payment (generalised $(k{+}1)$th-price rule among admitted bidders) is
+\begin{equation}
+    p^{\text{PA}}_j(\bsc) =
+    \begin{cases}
+        v^{\mathcal{M}}_{(k+1)} & |\mathcal{M}_j| \geq k+1 \\
+        0                        & \text{otherwise,}
+    \end{cases}
+    \label{eq:pa_payment}
+\end{equation}
+where $v^{\mathcal{M}}_{(k+1)}$ is the $(k{+}1)$th highest value among the admitted set.
+
+\subsubsection{Recipient Audit (RA)}
+
+No participation threshold is applied.  Each advertiser's individual social value
+is $w_i = v_i + e_i$.  The $k$ advertisers with the largest \emph{positive} social
+value are selected:
+\begin{equation}
+    \mathcal{S}^{\text{vcgRA}}_j
+    = \operatorname*{arg\,max}_{S \subseteq \{\,i : w_i > 0\,\},\,|S| \leq k}
+      \;\sum_{i \in S} w_i.
+    \label{eq:ra_winners}
+\end{equation}
+If fewer than $k$ advertisers have positive social value, all such advertisers are
+selected.  Social welfare is
+\begin{equation}
+    W^{\text{vcgRA}}_j = \sum_{i \in \mathcal{S}^{\text{vcgRA}}_j} w_i.
+\end{equation}
+
+\subsection{Welfare Aggregation}
+
+All reported welfare numbers use the $J_{\text{eval}} = 2000$ evaluation draws.
+Mean welfare for each mechanism is
+\begin{equation}
+    \bar{W}^{\text{vcg}} = \frac{1}{J_{\text{eval}}}\sum_{j=1}^{J_{\text{eval}}} W^{\text{vcg}}_j, \quad
+    \bar{W}^{\text{vcgPA}}(\bsc^*) = \frac{1}{J_{\text{eval}}}\sum_{j=1}^{J_{\text{eval}}} W^{\text{vcgPA}}_j(\bsc^*), \quad
+    \bar{W}^{\text{vcgRA}} = \frac{1}{J_{\text{eval}}}\sum_{j=1}^{J_{\text{eval}}} W^{\text{vcgRA}}_j,
+\end{equation}
+where $\bsc^*$ is the optimal threshold found by the genetic algorithm.
+Welfare gains relative to the VCG counterfactual are
+\begin{equation}
+    \Delta W^{\text{PA}} = \bar{W}^{\text{vcgPA}}(\bsc^*) - \bar{W}^{\text{vcg}},
+    \qquad
+    \Delta W^{\text{RA}} = \bar{W}^{\text{vcgRA}} - \bar{W}^{\text{vcg}}.
+    \label{eq:delta_w}
+\end{equation}
+Both quantities are reported in dollars per month per auction draw.
+
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Genetic Algorithm Optimization}
+\label{sec:ga}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The goal is to find
+\begin{equation}
+    \bsc^* = \operatorname*{arg\,max}_{\bsc \in \mathcal{C}}\;
+             \bar{W}^{\text{vcgPA}}(\bsc),
+\end{equation}
+where $\mathcal{C}$ is the gene space defined below.  Because the objective is
+non-convex in $\bsc$ and the feasible space is continuous and high-dimensional,
+we use a genetic algorithm (GA) operating directly in original $(v, e)$ space
+without any normalization.
+
+\subsection{Gene Space}
+\label{sec:gene_space}
+
+The gene space $\mathcal{C} = \mathcal{C}_0 \times \mathcal{C}_1 \times \cdots \times \mathcal{C}_D$
+is derived from the empirical distribution of $(v_i, e_i)$ values so that the
+search range scales correctly regardless of the externality cost $\zeta$ or the
+polynomial degree $D$.
+
+Let $\sigma_v$ denote the standard deviation of advertiser values across all
+bidder draws, and let $\overline{|e|^d} = \mathbb{E}[|e_i|^d]$ denote the
+mean absolute $d$th power of externalities.
+
+The intercept gene space ensures the threshold can start above or below all bids:
+\begin{equation}
+    \mathcal{C}_0 = \bigl[v_{\min} - \tfrac{1}{2}\sigma_v,\;\;
+                          v_{\max} + \tfrac{1}{2}\sigma_v\bigr].
+    \label{eq:gene0}
+\end{equation}
+
+For slope coefficients ($d \geq 1$), the range is calibrated so that at a typical
+externality value, the contribution $|c_d \cdot e^d|$ can shift $\tau$ by up to
+$\lambda \sigma_v$ — covering the full spread of advertiser values:
+\begin{equation}
+    \mathcal{C}_d = \Bigl[{-\lambda\,\sigma_v}/{\overline{|e|^d}},\;\;
+                           {\lambda\,\sigma_v}/{\overline{|e|^d}}\Bigr],
+    \quad d = 1, \ldots, D,
+    \label{eq:gened}
+\end{equation}
+where $\lambda = 3$ is the range multiplier (Table~\ref{tab:ga_hyperparams}).
+
+\subsection{Vectorized Fitness Evaluation}
+
+All $N_{\text{pop}}$ candidate solutions in the current population are evaluated
+simultaneously using a single matrix multiply per auction draw.  Let
+$\mathbf{P} \in \mathbb{R}^{N_{\text{pop}} \times (D+1)}$ be the population matrix
+(row $g$ is candidate $\bsc^{(g)}$) and let
+$\mathbf{E}^{(j)} \in \mathbb{R}^{n \times (D+1)}$ be the Vandermonde-style
+power matrix for draw $j$ with entries $E^{(j)}_{ip} = e_i^{\,p}$.
+Then
+\begin{equation}
+    \mathbf{T}^{(j)} = \mathbf{P}\,\bigl(\mathbf{E}^{(j)}\bigr)^{\!\top}
+    \in \mathbb{R}^{N_{\text{pop}} \times n},
+    \qquad T^{(j)}_{g,i} = \tau(e_i;\,\bsc^{(g)}),
+    \label{eq:tau_mat}
+\end{equation}
+evaluating the threshold for every population member and every advertiser at once.
+The admission mask is $A^{(j)}_{g,i} = \mathbf{1}[v_i \geq T^{(j)}_{g,i}]$.
+Advertisers are sorted by $v$ descending; the cumulative sum of admitted indicators
+identifies the first $k$ admitted positions, yielding the winner set.
+Welfare is accumulated by summing $v_i + e_i$ over winners for all $g$ simultaneously.
+The fitness of candidate $g$ is
+\begin{equation}
+    F_g = \frac{1}{J_{\text{train}}}\sum_{j=1}^{J_{\text{train}}} W^{\text{vcgPA}}_j(\bsc^{(g)}),
+\end{equation}
+accumulated across the $J_{\text{train}} = 500$ training draws without storing
+per-draw matrices.  The evaluation draws are never seen by the optimizer.
+
+\subsection{Selection, Crossover, and Mutation}
+
+\paragraph{Selection.}
+Tournament selection: for each parent slot, a random subset of the population is
+drawn without replacement and the candidate with the highest fitness wins.
+
+\paragraph{Crossover.}
+Single-point crossover: a random cut point in $\{1,\ldots,D\}$ is chosen for each
+pair of parents, and the offspring receives coefficients from parent~A before the
+cut and from parent~B after.
+
+\paragraph{Mutation.}
+Gaussian perturbation with per-gene step sizes proportional to each gene's range:
+\begin{equation}
+    \sigma_d^{\text{mut}} = \sigma_{\text{frac}} \cdot |\mathcal{C}_d|,
+    \label{eq:mut_sigma}
+\end{equation}
+where $|\mathcal{C}_d| = c_d^{\max} - c_d^{\min}$ is the gene range width and
+$\sigma_{\text{frac}}$ is the mutation sigma fraction (Table~\ref{tab:ga_hyperparams}).
+Each gene is independently perturbed with probability $p_{\text{mut}}$; to
+prevent stagnation, at least one gene per offspring is always mutated.
+All perturbed values are clipped to the gene bounds.
+
+\subsection{Multi-Restart and Warm Start}
+\label{sec:restarts}
+
+To increase coverage of the coefficient space, each experimental cell is run for
+$R$ independent restarts, each with a different random seed.  The solution with
+the highest fitness across all restarts is retained.
+
+\paragraph{Warm start.}
+When sweeping polynomial degrees $D = 1, 2, 3$ in ascending order, the optimal
+solution from degree $D$ is used to seed the first population member for
+degree $D+1$:
+\begin{equation}
+    \bsc_{\text{seed}}^{(D+1)} = \bigl(c_0^*, c_1^*, \ldots, c_D^*,\; 0\bigr).
+    \label{eq:warm_start}
+\end{equation}
+The warm start is applied only to restart~0; remaining restarts use a fresh
+random population, preserving the benefit of the warm start while maintaining
+diversity.
+
+\paragraph{Fair cross-degree comparison.}
+All degrees within the same cell $(k, \zeta, n)$ use an identical set of $J$
+bidder draws (controlled by a shared sample seed that excludes the degree index).
+This ensures that welfare differences across degrees reflect the effect of
+polynomial flexibility rather than sampling variation.
+
+\subsection{Hyperparameters}
+\label{sec:hyperparams}
+
+\begin{table}[H]
+\caption{Genetic algorithm hyperparameters (defaults used unless noted otherwise).}
+\label{tab:ga_hyperparams}
+\begin{center}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+Symbol & Default & Description \\
+\midrule
+$D$ & 1, 2, 3 & Polynomial degree of $\tau$ (swept) \\
+$N_{\text{pop}}$ & 50 & Population size \\
+$T$ & 500 & GA generations per restart \\
+$R$ & 1 & Independent restarts per cell \\
+$N_{\text{mate}}$ & 15 & Parents selected for crossover each generation \\
+$p_{\text{mut}}$ & 0.25 & Per-gene mutation probability \\
+$\sigma_{\text{frac}}$ & 0.15 & Gaussian mutation step as fraction of gene range \\
+$\lambda$ & 3.0 & Gene range multiplier (Eq.~\ref{eq:gened}) \\
+$J_{\text{train}}$ & 500  & Training auction draws per cell (GA fitness) \\
+$J_{\text{eval}}$  & 2000 & Evaluation draws per cell (welfare reporting only) \\
+$n$ & 20 & Bidders sampled per auction draw \\
+\bottomrule
+\end{tabularx}
+\end{center}
+\end{table}
+
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Expected Penalty Curves}
+\label{sec:penalties}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Given the optimized threshold $\tau(e;\,\bsc^*)$, we compute the expected penalty
+an advertiser with externality value $e$ would face under each audit mechanism.
+
+\subsection{Participant Audit: $R^{\text{PA}}(e)$}
+\label{sec:r_pa}
+
+Under the participant audit, an advertiser with externality $e$ is excluded from
+any draw in which the market-clearing price $p^{\text{PA}}_j$ falls below the
+threshold $\tau(e;\,\bsc^*)$.  To clear the threshold in such a draw, the advertiser
+would need to post collateral equal to the shortfall
+$\tau(e;\,\bsc^*) - p^{\text{PA}}_j > 0$.
+
+Let $\{p_j\}_{j=1}^{J_{\text{eval}}}$ be the sequence of auction payments from
+\eqref{eq:pa_payment}, computed on the evaluation draws.  Define
+\begin{align}
+    A(e) &= \frac{1}{J_{\text{eval}}}\bigl|\bigl\{ j : p_j < \tau(e;\,\bsc^*) \bigr\}\bigr|,
+    \label{eq:A_e} \\
+    P(e) &= \mathbb{E}\!\left[p_j \;\big|\; p_j < \tau(e;\,\bsc^*)\right].
+    \label{eq:P_e}
+\end{align}
+Here $A(e)$ is the fraction of draws in which the market price is below the
+threshold, and $P(e)$ is the mean price conditional on being below the threshold.
+The expected participant penalty at externality $e$ is
+\begin{equation}
+    R^{\text{PA}}(e) = A(e)\,\bigl[\tau(e;\,\bsc^*) - P(e)\bigr].
+    \label{eq:r_pa}
+\end{equation}
+For large negative externalities, the threshold $\tau(e;\bsc^*)$ is high relative
+to the market price, so both $A(e)$ and the expected gap are large, resulting in a
+steep penalty.  For posts with small or positive externalities, $\tau(e;\bsc^*)$ is
+low and most market prices clear it, so $A(e) \approx 0$ and $R^{\text{PA}}(e)
+\approx 0$.
+
+\subsection{Recipient Audit: $R^{\text{RA}}(e)$}
+\label{sec:r_ra}
+
+Under the recipient audit, selection is based on social value $w_i = v_i + e_i$.
+An advertiser with externality $e$ internalises the full cost of its externality:
+\begin{equation}
+    R^{\text{RA}}(e) = -e.
+    \label{eq:r_ra}
+\end{equation}
+This is linear in $e$: advertisers generating negative externalities ($e < 0$)
+pay a penalty equal to $|e|$, while those generating positive externalities
+($e > 0$) effectively receive a subsidy.
+
+\end{document}
