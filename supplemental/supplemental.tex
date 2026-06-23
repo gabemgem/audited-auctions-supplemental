@@ -471,12 +471,6 @@ an advertiser with externality value $e$ would face under each audit mechanism.
 \subsection{Participant Audit: $R^{\text{PA}}(e)$}
 \label{sec:r_pa}
 
-Under the participant audit, an advertiser with externality $e$ is excluded from
-any draw in which the market-clearing price $p^{\text{PA}}_j$ falls below the
-threshold $\tau(e;\,\bsc^*)$.  To clear the threshold in such a draw, the advertiser
-would need to post collateral equal to the shortfall
-$\tau(e;\,\bsc^*) - p^{\text{PA}}_j > 0$.
-
 Let $\{p_j\}_{j=1}^{J_{\text{eval}}}$ be the sequence of auction payments from
 \eqref{eq:pa_payment}, computed on the evaluation draws.  Define
 \begin{align}
@@ -487,9 +481,12 @@ Let $\{p_j\}_{j=1}^{J_{\text{eval}}}$ be the sequence of auction payments from
 \end{align}
 Here $A(e)$ is the fraction of draws in which the market price is below the
 threshold, and $P(e)$ is the mean price conditional on being below the threshold.
-The expected participant penalty at externality $e$ is
+For any given externality $e$, to induce the threshold $\tau(e)$ the participant 
+penalty $r(e)$ must be equal to the expected utility from allocation for a bidder 
+with type at the threshold ($e,\tau(e)$). Thus, the penalty function may be calculated 
+as in \eqref{eq:r_pa}.
 \begin{equation}
-    R^{\text{PA}}(e) = A(e)\,\bigl[\tau(e;\,\bsc^*) - P(e)\bigr].
+    R^{\text{PA}}(e) = \bigl[A(e)\,\tau(e;\,\bsc^*)\bigr] - P(e).
     \label{eq:r_pa}
 \end{equation}
 For large negative externalities, the threshold $\tau(e;\bsc^*)$ is high relative
